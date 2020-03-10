@@ -1,0 +1,418 @@
+---
+title: "HW 3"
+author: "Kelsey Blackstone"
+output:
+  html_document: default
+  pdf_document: default
+editor_options:
+  chunk_output_type: inline
+---
+```{r, echo = FALSE, results='hide'}
+library(kableExtra)
+library(bivariate)
+library(plotly)
+library(invgamma)
+library(coda)
+```
+
+## Problem 6: Confidence Intervals 
+
+```{r, echo = FALSE, results='hide'}
+n = 10
+x = 1
+
+# Exact
+alpha_post = x + 1/2
+beta_post = n - x + 1/2
+exact_s1 = c(qbeta(.025, alpha_post, beta_post),qbeta(.975, alpha_post, beta_post))
+
+e_1 = paste("(", toString(round(c(exact_s1[1], exact_s1[2]), 4)), ")")
+
+# Laplace Approximation
+theta0 <- (alpha_post - 1)/(alpha_post + beta_post - 2)
+
+q0 <- exp((alpha_post - 1)*log(theta0) + (beta_post - 1)*log(1 - theta0))
+A_inv <- (alpha_post - 1)*(beta_post - 1)/(alpha_post + beta_post - 2)^3
+
+# Constant
+k <- q0*sqrt(2*pi*A_inv)/beta(alpha_post, beta_post)
+
+# Interval
+lower <- qnorm((1 - 0.95/k)/2, theta0, sqrt(A_inv))
+upper <- qnorm((1 - 0.95/k)/2, theta0, sqrt(A_inv), lower.tail=FALSE)
+LA_s1 = paste("(", toString(round(c(lower, upper),4)), ")")
+
+# Monte Carlo Simulated Interval
+mc_sim <- rbeta(40000, alpha_post, beta_post)
+MC_s1 = paste("(", toString(round(quantile(mc_sim, probs=c(0.025, 0.975)), 4)), ")")
+```
+
+```{r, echo=FALSE, results='hide'}
+n = 100
+x = 10
+
+# Exact Interval
+alpha_post = x + 1/2
+beta_post = n - x + 1/2
+exact_s2 = c(qbeta(.025, alpha_post, beta_post),qbeta(.975, alpha_post, beta_post))
+e_2 = paste("(", toString(round(c(exact_s2[1], exact_s2[2]), 4)), ")")
+
+# Laplace Approximation
+theta0 <- (alpha_post - 1)/(alpha_post + beta_post - 2)
+
+q0 <- exp((alpha_post - 1)*log(theta0) + (beta_post - 1)*log(1 - theta0))
+A_inv <- (alpha_post - 1)*(beta_post - 1)/(alpha_post + beta_post - 2)^3
+
+# Constant
+k <- q0*sqrt(2*pi*A_inv)/beta(alpha_post, beta_post)
+
+# Interval
+lower <- qnorm((1 - 0.95/k)/2, theta0, sqrt(A_inv))
+upper <- qnorm((1 - 0.95/k)/2, theta0, sqrt(A_inv), lower.tail=FALSE)
+LA_s2 = paste("(", toString(round(c(lower, upper), 4)), ")")
+
+# Monte Carlo Simulated Interval
+mc_sim <- rbeta(40000, alpha_post, beta_post)
+MC_s2 = paste("(", toString(round(quantile(mc_sim, probs=c(0.025, 0.975)),4)), ")")
+```
+
+```{r, echo=FALSE, results='hide'}
+n = 1000
+x = 100
+
+# Exact
+alpha_post = x + 1/2
+beta_post = n - x + 1/2
+exact_s3 = c(qbeta(.025, alpha_post, beta_post),qbeta(.975, alpha_post, beta_post))
+e_3 = paste("(", toString(round(c(exact_s3[1], exact_s3[2]),4)), ")")
+
+# Laplace Approximation
+theta0 <- (alpha_post - 1)/(alpha_post + beta_post - 2)
+theta0
+
+q0 <- exp((alpha_post - 1)*log(theta0) + (beta_post - 1)*log(1 - theta0))
+A_inv <- (alpha_post - 1)*(beta_post - 1)/(alpha_post + beta_post - 2)^3
+
+# Constant
+k <- q0*sqrt(2*pi*A_inv)/beta(alpha_post, beta_post)
+k
+
+# Interval
+lower <- qnorm((1 - 0.95/k)/2, theta0, sqrt(A_inv))
+
+upper <- qnorm((1 - 0.95/k)/2, theta0, sqrt(A_inv), lower.tail=FALSE)
+
+LA_s3 = paste("(", toString(round(c(lower, upper),4)), ")") 
+
+# Monte Carlo Simulated Interval
+mc_sim <- rbeta(40000, alpha_post, beta_post)
+MC_s3 = paste("(", toString(round(quantile(mc_sim, probs=c(0.025, 0.975)),4)), ")")
+
+```
+
+```{r, echo = FALSE}
+x = c("Exact", "Laplace Approximation", "Monte Carlo Simulation")
+y = c(e_1, LA_s1, MC_s1)
+z = c(e_2, LA_s2, MC_s2)
+m = c(e_3, LA_s3, MC_s3)
+table = as.data.frame(cbind(x,y,z,m))
+table %>% kable(caption = "Confidence Intervals for Different Approximations", col.names = c("CI Method", "n =  10, x = 1", "n = 100, x = 10", "n = 1000, x = 100")) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                latex_options = "HOLD_position")
+
+```
+
+
+## Problem 7 
+
+### Part A: 
+Find the posterior. Use the simulated dataset and evaluate the posterior density in the grid of ($\alpha$, $\beta$)
+
+```{r}
+## Generating 500 samples from the Gumbel Type II Distribution
+
+set.seed(666)
+
+a = 5
+b = 5
+
+u = runif(500)
+x = (-log(u)/b)^(-1/a)
+
+## Likelihood f(x | a, b):
+
+loglike_gumb <- function (a, b) {500*log(a*b)+(-a-1)*sum(log(x))-b*sum(x^-a)}
+
+## We now need to take the double integral with respect to a and b 
+## in order to obtain the normalizing constant for the denominator
+
+# for all combinations of a and b - multiply to get area
+# store values into a matrix 
+
+a = seq(4, 7, by=0.01)
+b = seq(4, 7, by=0.01)
+base=0.01*0.01
+
+rectangles <- matrix(NA, nrow = length(a), ncol = length(b))
+height <- matrix(NA,nrow = length(a), ncol = length(b))
+for (i in 1:length(a)){
+  for (j in 1:length(b)){
+    result = exp(loglike_gumb(a[i], b[j]))
+    height[i,j] = result
+    rectangles[i,j] = base*result
+  }
+}
+
+## Normalizing Constant
+sum(rectangles)
+
+## Final Posterior 
+post_gumb = height/sum(rectangles)
+
+## Plotting final posterior
+layout(add_surface(plot_ly(x = a, y = b, z = post_gumb)),scene = list(xaxis = list(title = "alpha"), yaxis = list(title = "beta"), zaxis = list(title = "Posterior Gumbel Distribution")))
+
+```
+
+### Part B: 
+
+Find the Laplace approximation to the posterior. Use the same simulated data and evaluate the approximated posterior on the grid of ($\alpha$, $\beta$).
+
+```{r}
+## Find Laplace Approximation to the normal
+
+## Set posterior equal to q0
+
+q0 = function(theta){
+  a = theta[1]
+  b = theta[2]
+  500*log(a*b)+(-a-1)*sum(log(x))-b*sum(x^-a)}
+
+# find the posterior mode (th0) and covariance matrix (A)
+
+## we want to optimize alpha and beta
+begin = c(a = 0.5, b = 0.5)
+
+## make theta a vector of parameters in order to use optim function
+## maximize by setting control to negative
+
+LA_values = optim(begin, q0, control = list(fnscale = -1), hessian = TRUE)
+th0 = LA_values$par             
+cov_mat_A = LA_values$hessian 
+cov_mat_Ainv = solve(-cov_mat_A)
+th0
+cov_mat_Ainv
+
+# Density of Laplace Approximation to Normal
+
+# variance of alpha = var.X is in cov_mat_Ainv[1,1]
+# variance of beta = var.Y is cov_mat_Ainv[2,2]
+# cov of a, b = cov is either cov_mat_Ainv[1,2] or cov_mat_Ainv[2,1]
+# take multivariate normal and turn it into pdf 
+
+LA_approx = nbvpdf.2(th0[1],th0[2],var.X = cov_mat_Ainv[1,1], 
+                     var.Y = cov_mat_Ainv[2,2], cov = cov_mat_Ainv[1,2])
+plot(LA_approx, TRUE, main="Laplace Approximation of Posterior",xlab="alpha",ylab="beta",zlab="density")
+
+
+# compare post_gumb and LA_approx
+a = seq(4, 7, by=0.01)
+b = seq(4, 7, by=0.01)
+
+height.la = matrix(NA, nrow = length(a), ncol = length(b))
+for(i in 1:length(a)){
+  for(j in 1:length(b)){
+    height.la[i,j] = LA_approx(a[i],b[j])
+  }
+}
+
+comp = height.la - height/sum(rectangles)
+
+layout(add_surface(plot_ly(x = a, y = b, z = comp)),scene = list(xaxis = list(title = "alpha"), yaxis = list(title = "beta"), zaxis = list(title = "Laplace - Exact")))
+
+```
+
+### Part C: Comparing Exact and Laplace
+
+Looking at the differences plot for the Laplace Approximated values vs. the exact values, we see that the differences are between 0.1 and -0.1, which isn't a large difference. This demonstrates that the Laplace Approximation to the normal, for large values of n (in this case, n=500), comes fairly close to the true values. 
+
+
+## Problem 8
+
+```{r}
+# Problem 8
+rm(list=ls())
+set.seed(666)
+n = 1000
+X.st.dv = 1
+X.mean = 5
+data = rnorm(n, mean = X.mean, sd = X.st.dv)
+
+# Setting values for hyperparamters for each case: (i), (ii), (iii), (vi)
+a = c(1001, 0.1, 1001, 0.1)
+b = c(1000, 0.1, 1000, 0.1)
+k0 = c(0.01, 0.01, 100, 100)
+theta0 = c(5, 5, 5, 5)
+```
+
+
+```{r, fig.height=3, fig.width=6}
+
+par(mfrow = c(1,2))
+# Part E: 
+
+# (i) Fairly Informative Priors
+
+# parameters of sigma^2|xis
+shape_sigma_i = n/2 + a[1]
+rate_sigma_i = ((X.st.dv)^2)*(n-1)/2 + (n*(X.mean - theta0[1])^2)/(2*(n*k0[1] + 1)) + b[1]
+
+# parameters of theta|sigma, xi
+theta0.mean_i = (n + 1/k0[1])^-1 * (n*X.mean + theta0[1]/k0[1])
+theta0.var_i = 1/(n/(X.st.dv^2) + 1/(k0[1]*X.st.dv^2))
+
+plot(density(rinvgamma(n, shape = a[1], rate = b[1])), main = "Informative Prior: Sigma^2")
+plot(density(rinvgamma(n, shape_sigma_i, rate = rate_sigma_i)), main = "Posterior: Sigma^2")
+
+plot(density(rnorm(n, mean = theta0[1], sd = k0[1]*X.st.dv)), main = "Informative Prior: Theta")
+plot(density(rnorm(n, mean = theta0.mean_i, sd = sqrt(theta0.var_i))), main = "Posterior: Theta")
+
+
+# (ii) Informative on theta and vague on sigma^2 
+
+# parameters of sigma^2|xis
+shape_sigma_ii = n/2 + a[2]
+rate_sigma_ii = ((X.st.dv)^2)*(n-1)/2 + (n*(X.mean - theta0[2])^2)/(2*(n*k0[2] + 1)) + b[2]
+
+# parameters of theta|sigma, xi
+theta0.mean_ii = (n + 1/k0[2])^-1 * (n*X.mean + theta0[2]/k0[2])
+theta0.var_ii = 1/(n/(X.st.dv^2) + 1/(k0[2]*X.st.dv^2))
+
+plot(density(rinvgamma(n = 500, shape = a[2], rate = b[2])), main = "Vague Prior: Sigma^2")
+plot(density(rinvgamma(n, shape_sigma_ii, rate = rate_sigma_ii)), main = "Posterior: Sigma^2")
+
+plot(density(rnorm(n, mean = theta0[2], sd = k0[2]*X.st.dv)), main = "Informative Prior: Theta")
+plot(density(rnorm(n, mean = theta0.mean_ii, sd = sqrt(theta0.var_ii))), main = "Posterior: Theta")
+
+
+# (iii) Informative on sigma^2 and vague on theta
+# parameters of sigma^2|xis
+shape_sigma_iii = n/2 + a[3]
+rate_sigma_iii = ((X.st.dv)^2)*(n-1)/2 + (n*(X.mean - theta0[3])^2)/(2*(n*k0[3] + 1)) + b[3]
+
+# parameters of theta|sigma, xi
+theta0.mean_iii = (n + 1/k0[3])^-1 * (n*X.mean + theta0[3]/k0[3])
+theta0.var_iii = 1/(n/(X.st.dv^2) + 1/(k0[3]*X.st.dv^2))
+
+plot(density(rinvgamma(n = 500, shape = a[3], rate = b[3])), main = "Informative Prior: Sigma^2")
+plot(density(rinvgamma(n, shape_sigma_iii, rate = rate_sigma_iii)), main = "Posterior: Sigma^2")
+
+plot(density(rnorm(n, mean = theta0[3], sd = k0[3]*X.st.dv)), main = "Vague Prior on Theta")
+plot(density(rnorm(n, mean = theta0.mean_iii, sd = sqrt(theta0.var_iii))), main = "Posterior: Theta")
+
+
+# (vi) Vague on sigma^2 and vague on theta
+# parameters of sigma^2|xis
+shape_sigma_vi = n/2 + a[4]
+rate_sigma_vi = ((X.st.dv)^2)*(n-1)/2 + (n*(X.mean - theta0[4])^2)/(2*(n*k0[4] + 1)) + b[4]
+
+# parameters of theta|sigma, xi
+theta0.mean_vi = (n + 1/k0[4])^-1 * (n*X.mean + theta0[4]/k0[4])
+theta0.var_vi = 1/(n/(X.st.dv^2) + 1/(k0[4]*X.st.dv^2))
+
+plot(density(rinvgamma(n = 500, shape = a[4], rate = b[4])), main = "Vague Prior: Sigma^2")
+plot(density(rinvgamma(n, shape_sigma_vi, rate = rate_sigma_vi)), main = "Posterior: Sigma^2")
+
+plot(density(rnorm(n, mean = theta0[4], sd = k0[4]*X.st.dv)), main = "Vague Prior: Theta")
+plot(density(rnorm(n, mean = theta0.mean_iii, sd = sqrt(theta0.var_iii))), main = "Posterior: Theta")
+
+```
+
+```{r}
+## Part F
+
+init = c(4,4) ## th0 and sigma0^2
+
+niter = 10000
+eta <- matrix(NA, nrow = niter, ncol = 4)   ## create empty matrix to store eta
+
+# parameters of sigma^2 | xis
+shape_sigma = n/2 + a
+rate_sigma = ((X.st.dv)^2)*(n-1)/2 + 
+  (n*(X.mean - theta0)^2)/(2*(n*k0 + 1)) + b
+
+# parameters of theta | sigma, xi
+theta0.mean = (n + 1/k0)^-1 * (n*X.mean + theta0/k0)
+theta0.var = 1/(n/(X.st.dv^2) + 1/(k0*X.st.dv^2))
+
+for (i in 1:niter){
+    for (j in 1:4){
+          # sampling new values for sigma and theta
+          init[2] = rinvgamma(1, shape = shape_sigma[j], rate = rate_sigma[j])
+          init[1] = rnorm(1, mean = theta0.mean[j], sqrt(init[2])) # new theta sample
+          
+          eta.value = init[1]/sqrt(init[2])
+          eta[i,j] = eta.value
+      }
+}
+```
+
+```{r, echo=FALSE}
+hist(eta[,1], main = "Case (i)")
+hist(eta[,2], main = "Case (ii)")
+hist(eta[,3], main = "Case (iii)")
+hist(eta[,4], main = "Case (vi)")
+
+## Example Plot 
+plot(eta[,1],type="l", main = "Eta: Case (i)")
+abline(5,0,lwd=2,col="red")
+
+plot(eta[,2],type="l", main = "Eta: Case (i)")
+abline(5,0,lwd=2,col="red")
+
+plot(eta[,3],type="l", main = "Eta: Case (i)")
+abline(5,0,lwd=2,col="red")
+
+plot(eta[,4],type="l", main = "Eta: Case (i)")
+abline(5,0,lwd=2,col="red")
+
+## posterior means of eta
+post.mean.eta1 <- mean(eta[seq(from=1001, to=niter,by=1),1]) 
+post.mean.eta2 <- mean(eta[seq(from=1001, to=niter,by=1),2])
+post.mean.eta3 <- mean(eta[seq(from=1001, to=niter,by=1),3])
+post.mean.eta4 <- mean(eta[seq(from=1001, to=niter,by=1),4])
+
+# Posterior 95% CI
+
+quant1.low <- round(quantile(eta[seq(from=1001, to=niter, by=1), 1], 0.025),3)
+quant1.upp <- round(quantile(eta[seq(from=1001, to=niter, by=1), 1], 0.975),3)
+quant1 <- c(quant1.low, quant1.upp)
+
+quant2.low <- round(quantile(eta[seq(from=1001, to=niter, by=1), 2], 0.025),3)
+quant2.upp <- round(quantile(eta[seq(from=1001, to=niter, by=1), 2], 0.975),3)
+quant2 <- c(quant2.low, quant2.upp)
+
+quant3.low <- round(quantile(eta[seq(from=1001, to=niter, by=1), 3], 0.025),3)
+quant3.upp <- round(quantile(eta[seq(from=1001, to=niter, by=1), 3], 0.975),3)
+quant3 <- c(quant3.low, quant3.upp)
+
+quant4.low <- round(quantile(eta[seq(from=1001, to=niter, by=1), 4], 0.025), 3)
+quant4.upp <- round(quantile(eta[seq(from=1001, to=niter, by=1), 4], 0.975), 3)
+quant4 <- c(quant4.low, quant4.upp)
+
+y = c("i", "ii", "iii", "vi")
+thet0 = c(5, 5, 5, 5)
+k0 = c(0.01, 0.01, 100, 100)
+a = c(1001, 0.1, 1001, 0.1)
+b = c(1000, 0.1, 1000, 0.1)
+post.mean = c(round(post.mean.eta1,3), round(post.mean.eta2,3), round(post.mean.eta3,3), round(post.mean.eta4,3))
+cis_low = c(quant1.low, quant2.low, quant3.low, quant4.low)
+cis_upp = c(quant1.upp, quant2.upp, quant3.upp, quant4.upp)
+table = as.data.frame(cbind(y, thet0, k0, a, b, post.mean, cis_low, cis_upp))
+table %>% kable(caption = "Posterior Quantities with various Prior Specification", col.names = c("Case", "θ", "k0", "a", "b", "Posterior Mean", "Posterior 2.5% CI", "Posterior 97.5% CI"), row.names = FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                latex_options = "HOLD_position")
+
+
+```
+
